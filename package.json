@@ -1,0 +1,234 @@
+{
+  "name": "ansible-log-colors",
+  "displayName": "Ansible Log Colors",
+  "description": "Colors saved ansible-playbook and AWX job output the way the terminal shows it: ok green, changed yellow, failed red, skipping cyan. Folding per PLAY/TASK.",
+  "version": "0.1.0",
+  "publisher": "lejonbrames",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:ansible-log",
+    "onLanguage:log",
+    "onLanguage:plaintext"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ansible-log",
+        "aliases": [
+          "Ansible Log",
+          "ansible-log"
+        ],
+        "extensions": [
+          ".ansible.log",
+          ".ansible.txt"
+        ],
+        "filenamePatterns": [
+          "*ansible*.log",
+          "job_*.txt",
+          "*.awx.txt"
+        ],
+        "firstLine": "^(\\u001b\\[[0-9;]*m)*(PLAY \\[|TASK \\[|Using .+ as config file|No config file found|ansible-playbook \\[core|Identity added: |Vault password)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ansibleLog.colorize",
+        "title": "Color This File as Ansible Output",
+        "category": "Ansible Log"
+      }
+    ],
+    "colors": [
+      {
+        "id": "ansibleLog.ok",
+        "description": "ok: lines and ok=N in the recap",
+        "defaults": {
+          "dark": "terminal.ansiGreen",
+          "light": "terminal.ansiGreen",
+          "highContrast": "terminal.ansiGreen",
+          "highContrastLight": "terminal.ansiGreen"
+        }
+      },
+      {
+        "id": "ansibleLog.changed",
+        "description": "changed: lines",
+        "defaults": {
+          "dark": "terminal.ansiYellow",
+          "light": "terminal.ansiYellow",
+          "highContrast": "terminal.ansiYellow",
+          "highContrastLight": "terminal.ansiYellow"
+        }
+      },
+      {
+        "id": "ansibleLog.skipped",
+        "description": "skipping: lines and ...ignoring",
+        "defaults": {
+          "dark": "terminal.ansiCyan",
+          "light": "terminal.ansiCyan",
+          "highContrast": "terminal.ansiCyan",
+          "highContrastLight": "terminal.ansiCyan"
+        }
+      },
+      {
+        "id": "ansibleLog.included",
+        "description": "included: lines",
+        "defaults": {
+          "dark": "terminal.ansiCyan",
+          "light": "terminal.ansiCyan",
+          "highContrast": "terminal.ansiCyan",
+          "highContrastLight": "terminal.ansiCyan"
+        }
+      },
+      {
+        "id": "ansibleLog.failed",
+        "description": "fatal:/failed: lines and ERROR!",
+        "defaults": {
+          "dark": "terminal.ansiRed",
+          "light": "terminal.ansiRed",
+          "highContrast": "terminal.ansiRed",
+          "highContrastLight": "terminal.ansiRed"
+        }
+      },
+      {
+        "id": "ansibleLog.unreachable",
+        "description": "UNREACHABLE! results",
+        "defaults": {
+          "dark": "terminal.ansiBrightRed",
+          "light": "terminal.ansiBrightRed",
+          "highContrast": "terminal.ansiBrightRed",
+          "highContrastLight": "terminal.ansiBrightRed"
+        }
+      },
+      {
+        "id": "ansibleLog.warning",
+        "description": "[WARNING] lines and ignored=N",
+        "defaults": {
+          "dark": "terminal.ansiBrightMagenta",
+          "light": "terminal.ansiBrightMagenta",
+          "highContrast": "terminal.ansiBrightMagenta",
+          "highContrastLight": "terminal.ansiBrightMagenta"
+        }
+      },
+      {
+        "id": "ansibleLog.deprecation",
+        "description": "[DEPRECATION WARNING] lines",
+        "defaults": {
+          "dark": "terminal.ansiMagenta",
+          "light": "terminal.ansiMagenta",
+          "highContrast": "terminal.ansiMagenta",
+          "highContrastLight": "terminal.ansiMagenta"
+        }
+      },
+      {
+        "id": "ansibleLog.verbose",
+        "description": "-vvv connection chatter (<host> ESTABLISH ...)",
+        "defaults": {
+          "dark": "terminal.ansiBlue",
+          "light": "terminal.ansiBlue",
+          "highContrast": "terminal.ansiBlue",
+          "highContrastLight": "terminal.ansiBlue"
+        }
+      },
+      {
+        "id": "ansibleLog.debug",
+        "description": "Debug output",
+        "defaults": {
+          "dark": "terminal.ansiBrightBlack",
+          "light": "terminal.ansiBrightBlack",
+          "highContrast": "terminal.ansiBrightBlack",
+          "highContrastLight": "terminal.ansiBrightBlack"
+        }
+      },
+      {
+        "id": "ansibleLog.diffAdd",
+        "description": "--diff added lines",
+        "defaults": {
+          "dark": "terminal.ansiGreen",
+          "light": "terminal.ansiGreen",
+          "highContrast": "terminal.ansiGreen",
+          "highContrastLight": "terminal.ansiGreen"
+        }
+      },
+      {
+        "id": "ansibleLog.diffRemove",
+        "description": "--diff removed lines",
+        "defaults": {
+          "dark": "terminal.ansiRed",
+          "light": "terminal.ansiRed",
+          "highContrast": "terminal.ansiRed",
+          "highContrastLight": "terminal.ansiRed"
+        }
+      },
+      {
+        "id": "ansibleLog.diffLines",
+        "description": "--diff headers and @@ lines",
+        "defaults": {
+          "dark": "terminal.ansiCyan",
+          "light": "terminal.ansiCyan",
+          "highContrast": "terminal.ansiCyan",
+          "highContrastLight": "terminal.ansiCyan"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Ansible Log Colors",
+      "properties": {
+        "ansibleLog.autoDetect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Switch .log and plain-text files to Ansible Log when they contain PLAY [ / TASK [ / PLAY RECAP lines near the top."
+        },
+        "ansibleLog.autoDetectLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "log",
+            "plaintext"
+          ],
+          "description": "Languages that auto-detect may switch to Ansible Log."
+        },
+        "ansibleLog.hideEscapeCodes": {
+          "type": "boolean",
+          "default": true,
+          "description": "When a log still has ANSI escape codes in it, hide the codes and color the text by them. Off: show the codes dimmed."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheLejonBrames/ansible-log-colors"
+  },
+  "bugs": {
+    "url": "https://github.com/TheLejonBrames/ansible-log-colors/issues"
+  },
+  "keywords": [
+    "ansible",
+    "awx",
+    "log",
+    "ansible-playbook",
+    "colors"
+  ],
+  "icon": "images/icon.png"
+}
