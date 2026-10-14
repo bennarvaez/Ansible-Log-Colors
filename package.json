@@ -3,8 +3,8 @@
   "displayName": "Ansible Log Colors",
   "description": "Colors saved ansible-playbook and AWX job output the way the terminal shows it: ok green, changed yellow, failed red, skipping cyan. Folding per PLAY/TASK.",
   "version": "0.1.0",
-  "publisher": "lejonbrames",
-  "license": "SEE LICENSE IN LICENSE",
+  "publisher": "BenNarvaez",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -218,10 +218,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/TheLejonBrames/ansible-log-colors"
+    "url": "https://github.com/bennarvaez/ansible-log-colors"
   },
   "bugs": {
-    "url": "https://github.com/TheLejonBrames/ansible-log-colors/issues"
+    "url": "https://github.com/bennarvaez/ansible-log-colors/issues"
   },
   "keywords": [
     "ansible",
