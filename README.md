@@ -1,6 +1,6 @@
 # Ansible Log Colors
 
-Make large `ansible-playbook` and AWX logs readable in VS Code in seconds.
+Make large Ansible logs readable in VS Code in seconds.
 
 This extension gives saved Ansible output the same visual meaning you rely on in a terminal:
 green for success, yellow for changed, cyan for skipped/included, red for failures, and clear
@@ -8,8 +8,8 @@ section headers for fast scanning.
 
 ## Why this extension
 
-When you open exported AWX output or long playbook logs in a plain editor, everything is the same
-color and hard to triage.
+When you open exported AAP/AWX output, ansible-navigator output, or long playbook logs in a plain
+editor, everything is the same color and hard to triage.
 
 **Ansible Log Colors** restores structure and signal so you can quickly answer:
 - What failed?
@@ -40,9 +40,9 @@ same style until the next separator/header, matching how Ansible output is read 
 
 ### Works with both saved log styles
 
-- **Plain text logs** (AWX "Download output", `| tee run.log`, copy/paste): colors are inferred
-  from Ansible callback patterns.
-- **ANSI logs** (`ANSIBLE_FORCE_COLOR=1 ... > run.log`, AWX API `stdout/?format=ansi_download`):
+- **Plain text logs** (AAP/AWX downloads, ansible-navigator captures, `| tee run.log`,
+  copy/paste): colors are inferred from Ansible callback patterns.
+- **ANSI logs** (`ANSIBLE_FORCE_COLOR=1 ... > run.log`, AAP/AWX ANSI exports/downloads):
   original ANSI color codes are honored directly, and raw escape sequences can be hidden with
   `ansibleLog.hideEscapeCodes`.
 

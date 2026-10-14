@@ -1,8 +1,8 @@
 {
   "name": "ansible-log-colors",
   "displayName": "Ansible Log Colors",
-  "description": "Colors saved ansible-playbook and AWX job output the way the terminal shows it: ok green, changed yellow, failed red, skipping cyan. Folding per PLAY/TASK.",
-  "version": "0.1.0",
+  "description": "Turn Ansible logs into readable output in VS Code with terminal-style colors and foldable PLAY/TASK sections.",
+  "version": "0.1.1",
   "publisher": "BenNarvaez",
   "license": "MIT",
   "engines": {
@@ -225,6 +225,8 @@
   },
   "keywords": [
     "ansible",
+    "ansible-navigator",
+    "aap",
     "awx",
     "log",
     "ansible-playbook",
