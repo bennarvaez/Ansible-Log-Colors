@@ -2,7 +2,7 @@
   "name": "ansible-log-colors",
   "displayName": "Ansible Log Colors",
   "description": "Turn Ansible logs into readable output in VS Code with terminal-style colors and foldable PLAY/TASK sections.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "BenNarvaez",
   "license": "MIT",
   "engines": {
@@ -42,6 +42,28 @@
       {
         "command": "ansibleLog.colorize",
         "title": "Color This File as Ansible Output",
+        "category": "Ansible Log"
+      },
+      {
+        "command": "ansibleLog.foldTasks",
+        "title": "Fold Tasks",
+        "category": "Ansible Log",
+        "icon": "$(fold)"
+      },
+      {
+        "command": "ansibleLog.foldPassedTasks",
+        "title": "Fold Passed Tasks (keep changed and failed open)",
+        "category": "Ansible Log",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "ansibleLog.stripEscapeCodes",
+        "title": "Remove Escape Codes From This File",
+        "category": "Ansible Log"
+      },
+      {
+        "command": "ansibleLog.reveal",
+        "title": "Go to Section",
         "category": "Ansible Log"
       }
     ],
@@ -200,7 +222,66 @@
           "type": "boolean",
           "default": true,
           "description": "When a log still has ANSI escape codes in it, hide the codes and color the text by them. Off: show the codes dimmed."
+        },
+        "ansibleLog.colorHeadersByResult": {
+          "type": "boolean",
+          "default": true,
+          "description": "Color each PLAY and TASK header by the worst result under it (failed red, changed yellow, ok green...), so folded logs still show what happened."
         }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "ansibleLog.tree",
+          "name": "Ansible Log",
+          "icon": "images/icon.png",
+          "when": "ansibleLog.active"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "ansibleLog.foldTasks",
+          "when": "view == ansibleLog.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleLog.foldPassedTasks",
+          "when": "view == ansibleLog.tree",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ansibleLog.foldTasks",
+          "when": "editorLangId == ansible-log",
+          "group": "navigation@90"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ansibleLog.reveal",
+          "when": "false"
+        },
+        {
+          "command": "ansibleLog.foldTasks",
+          "when": "editorLangId == ansible-log"
+        },
+        {
+          "command": "ansibleLog.foldPassedTasks",
+          "when": "editorLangId == ansible-log"
+        },
+        {
+          "command": "ansibleLog.stripEscapeCodes",
+          "when": "editorLangId == ansible-log"
+        }
+      ]
+    },
+    "configurationDefaults": {
+      "[ansible-log]": {
+        "editor.foldingHighlight": false
       }
     }
   },

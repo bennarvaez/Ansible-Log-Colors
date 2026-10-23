@@ -66,16 +66,46 @@ creates fold regions from Ansible headers:
 Each region starts at that header and folds until the next relevant header. For `PLAY` sections,
 child `TASK` entries stay inside the play fold range.
 
-### How to use folding in VS Code
+### Headers show the result
 
-1. Open an Ansible log in **Ansible Log** mode.
-2. Use the gutter chevrons to fold individual TASK or PLAY sections.
-3. Use command palette actions like:
-   - **Fold All**
-   - **Unfold All**
-   - **Fold Level 2** (handy for collapsing most TASK detail quickly)
+Each `TASK` and `PLAY` header is colored by the worst result under it: red if anything
+failed, magenta if a failure was ignored, yellow if something changed, green if all ok,
+cyan if everything was skipped. A folded log still shows at a glance what happened
+(`ansibleLog.colorHeadersByResult`).
 
-This makes long run output navigable without losing context.
+### Fold commands
+
+- **Ansible Log: Fold Tasks** folds every TASK and leaves the PLAYs open. It's also on the
+  editor title bar.
+- **Ansible Log: Fold Passed Tasks** folds only ok/skipped tasks, leaving changed and
+  failed ones open.
+- Use the built-in **Unfold All** to open everything again.
+
+## Navigation tree
+
+When an Ansible log is active, an **Ansible Log** view appears in the Explorer with this tree:
+
+```
+PLAY [Provision Windows VM]
+  Gathering Facts
+  azure_windows_vm                      (role)
+    roles/azure_windows_vm/tasks/validate.yml   (file)
+      Validate required inputs
+```
+
+Every node has an icon colored by its worst result and a count summary such as
+`failed 1 · changed 3 · ok 12`. Click a node to jump to it. The tree follows your cursor.
+
+Exact file grouping needs `task path:` lines, which Ansible prints at `-vv` (AWX
+verbosity 2). Without them, tasks are grouped under the most recent `included:` file
+for the same role, and those file nodes are marked as inferred in their tooltip.
+
+## Escape codes and selection
+
+When a log still contains ANSI escape codes, the codes are collapsed to zero width and the
+text is colored by them. If anything still looks odd, run **Ansible Log: Remove Escape
+Codes From This File**. That strips the codes from the buffer, and the colors are then
+re-derived from the text.
 
 ## Customize colors
 

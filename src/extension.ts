@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { looksLikeAnsibleOutput, parse, sections, Span, Style } from './parse';
+import { looksLikeAnsibleOutput, parse, sections, Span, Style, Status, LogStructure, structure } from './parse';
+import { LogTree } from './tree';
 
 const LANG = 'ansible-log';
 
@@ -39,7 +40,10 @@ function typeFor(style: Style): vscode.TextEditorDecorationType | undefined {
   let opts: vscode.DecorationRenderOptions | undefined;
   if (style === 'escape') {
     opts = hideEscapes()
-      ? { textDecoration: 'none; display: none;' } // hide raw "\x1b[0;32m" noise
+      // Collapse the raw "\x1b[0;32m" codes to zero width but keep them in the layout.
+      // (display:none broke selection highlighting: VS Code measures selection rectangles
+      // from the rendered text, and hidden nodes have no rectangles.)
+      ? { opacity: '0', letterSpacing: '-1ch' }
       : { opacity: '0.35' };
   } else if (style.startsWith('ansi:')) {
     const [, fg, b] = style.split(':');
@@ -68,11 +72,45 @@ function linesOf(doc: vscode.TextDocument): string[] {
   return doc.getText().split(/\r?\n/);
 }
 
+const structCache = new WeakMap<vscode.TextDocument, { version: number; s: LogStructure }>();
+
+export function structureOf(doc: vscode.TextDocument): LogStructure {
+  const hit = structCache.get(doc);
+  if (hit && hit.version === doc.version) return hit.s;
+  const s = structure(linesOf(doc));
+  structCache.set(doc, { version: doc.version, s });
+  return s;
+}
+
+const STATUS_STYLE: Partial<Record<Status, Style>> = {
+  ok: 'ok', changed: 'changed', skipped: 'skipped', included: 'included',
+  ignored: 'warning', failed: 'failed', unreachable: 'unreachable',
+};
+
+// Color each PLAY / TASK header by the worst result under it, so a folded log still
+// shows what passed and what failed.
+function headerSpans(doc: vscode.TextDocument): Span[] {
+  if (!vscode.workspace.getConfiguration('ansibleLog').get('colorHeadersByResult', true)) return [];
+  const out: Span[] = [];
+  const push = (line: number, status: Status) => {
+    const style = STATUS_STYLE[status];
+    if (!style) return;
+    const text = doc.lineAt(line).text;
+    const end = text.search(/\s\*+\s*$/);
+    out.push({ line, start: 0, end: end > 0 ? end : text.length, style });
+  };
+  for (const p of structureOf(doc).plays) {
+    if (p.name) push(p.line, p.status);
+    for (const t of p.tasks) push(t.line, t.status);
+  }
+  return out;
+}
+
 function decorate(editor: vscode.TextEditor) {
   const doc = editor.document;
   const byStyle = new Map<Style, vscode.Range[]>();
   if (doc.languageId === LANG) {
-    for (const s of parse(linesOf(doc)) as Span[]) {
+    for (const s of [...parse(linesOf(doc)), ...headerSpans(doc)] as Span[]) {
       let list = byStyle.get(s.style);
       if (!list) byStyle.set(s.style, (list = []));
       list.push(new vscode.Range(s.line, s.start, s.line, s.end));
@@ -131,11 +169,69 @@ export function activate(context: vscode.ExtensionContext) {
         return out;
       },
     }),
+    vscode.commands.registerCommand('ansibleLog.foldTasks', () => foldTasks(() => true)),
+    vscode.commands.registerCommand('ansibleLog.foldPassedTasks', () =>
+      foldTasks(t => t.status === 'ok' || t.status === 'skipped' || t.status === 'included' || t.status === 'none')),
+    vscode.commands.registerCommand('ansibleLog.stripEscapeCodes', async () => {
+      const ed = vscode.window.activeTextEditor;
+      if (!ed) return;
+      const doc = ed.document;
+      const text = doc.getText();
+      const clean = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+      if (clean === text) { vscode.window.showInformationMessage('No escape codes in this file.'); return; }
+      await ed.edit(e => e.replace(new vscode.Range(0, 0, doc.lineCount, 0), clean));
+    }),
+    vscode.commands.registerCommand('ansibleLog.reveal', async (line: number) => {
+      const ed = vscode.window.activeTextEditor;
+      if (!ed || ed.document.languageId !== LANG) return;
+      const pos = new vscode.Position(line, 0);
+      await vscode.window.showTextDocument(ed.document, { viewColumn: ed.viewColumn, selection: new vscode.Range(pos, pos) });
+      // Open the clicked section if it was folded (and any folded parent), so the tree
+      // click shows its content, not just the header.
+      await vscode.commands.executeCommand('editor.unfold', { levels: 1, direction: 'up', selectionLines: [line] });
+      await vscode.commands.executeCommand('editor.unfold', { levels: 1, direction: 'down', selectionLines: [line] });
+      ed.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+    }),
     { dispose: resetTypes },
   );
 
+  const tree = new LogTree(structureOf);
+  const view = vscode.window.createTreeView('ansibleLog.tree', { treeDataProvider: tree, showCollapseAll: true });
+  const refreshTree = () => {
+    const doc = vscode.window.activeTextEditor?.document;
+    const isLog = doc?.languageId === LANG;
+    vscode.commands.executeCommand('setContext', 'ansibleLog.active', isLog);
+    if (doc && !isLog && doc.uri.scheme === 'output') return; // keep the last log while the Output panel has focus
+    tree.setDocument(isLog ? doc : undefined);
+  };
+  let treeTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push(
+    view, tree,
+    vscode.window.onDidChangeActiveTextEditor(refreshTree),
+    vscode.workspace.onDidOpenTextDocument(() => setTimeout(refreshTree, 50)),
+    vscode.workspace.onDidChangeTextDocument(e => {
+      if (e.document !== vscode.window.activeTextEditor?.document) return;
+      clearTimeout(treeTimer);
+      treeTimer = setTimeout(refreshTree, 400);
+    }),
+    vscode.window.onDidChangeTextEditorSelection(e => {
+      if (!view.visible || e.textEditor.document.languageId !== LANG) return;
+      const node = tree.nodeAt(e.selections[0].active.line);
+      if (node) view.reveal(node, { select: true, focus: false }).then(undefined, () => undefined);
+    }),
+  );
+  refreshTree();
+
   vscode.workspace.textDocuments.forEach(maybeDetect);
   vscode.window.visibleTextEditors.forEach(decorate);
+}
+
+async function foldTasks(which: (t: import('./parse').LogTask) => boolean) {
+  const ed = vscode.window.activeTextEditor;
+  if (!ed || ed.document.languageId !== LANG) return;
+  const lines = structureOf(ed.document).plays.flatMap(p => p.tasks).filter(t => t.end > t.line && which(t)).map(t => t.line);
+  if (!lines.length) return;
+  await vscode.commands.executeCommand('editor.fold', { levels: 1, direction: 'down', selectionLines: lines });
 }
 
 export function deactivate() { resetTypes(); }

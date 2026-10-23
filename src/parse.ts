@@ -177,3 +177,157 @@ const DETECT = /^(\x1b\[[0-9;]*m)*(PLAY \[|TASK \[|PLAY RECAP|RUNNING HANDLER \[
 export function looksLikeAnsibleOutput(head: string): boolean {
   return DETECT.test(head);
 }
+
+// ---------------------------------------------------------------- structure
+// PLAY / TASK / HANDLER sections with the results each one produced, for header colors,
+// folding commands and the navigation tree.
+
+export type Status = 'none' | 'skipped' | 'included' | 'ok' | 'changed' | 'ignored' | 'failed' | 'unreachable';
+
+const RANK: Record<Status, number> = { none: 0, skipped: 1, included: 2, ok: 3, changed: 4, ignored: 5, failed: 6, unreachable: 7 };
+
+export function worst(a: Status, b: Status): Status {
+  return RANK[b] > RANK[a] ? b : a;
+}
+
+export type Counts = Partial<Record<Status, number>>;
+
+export interface LogTask {
+  line: number;
+  end: number;              // last line of the section (inclusive)
+  kind: 'task' | 'handler';
+  name: string;             // without the "role : " prefix
+  role?: string;
+  path?: string;            // from "task path:" (-vv) — exact file the task lives in
+  includes: string[];       // files this task pulled in ("included: <file> for host")
+  counts: Counts;
+  status: Status;
+}
+
+export interface LogPlay {
+  line: number;
+  end: number;
+  name: string;
+  tasks: LogTask[];
+  status: Status;
+}
+
+export interface LogStructure { plays: LogPlay[]; recapLine?: number }
+
+const RESULT = /^(ok|changed|skipping|fatal|failed|included|unreachable|rescued|ignored):\s*(?:\[|(\S+) for )/;
+
+function resultStatus(keyword: string, rest: string): Status {
+  if (keyword === 'unreachable' || /UNREACHABLE!/.test(rest)) return 'unreachable';
+  switch (keyword) {
+    case 'ok': case 'rescued': return 'ok';
+    case 'changed': return 'changed';
+    case 'skipping': return 'skipped';
+    case 'included': return 'included';
+    case 'ignored': return 'ignored';
+    default: return 'failed';
+  }
+}
+
+export function structure(raw: string[]): LogStructure {
+  const lines = raw.map(l => l.includes('\x1b') ? l.replace(ESC_ANY, '') : l);
+  const plays: LogPlay[] = [];
+  let play: LogPlay | undefined;
+  let task: LogTask | undefined;
+  let recapLine: number | undefined;
+
+  const closeTask = (at: number) => {
+    if (!task) return;
+    task.end = Math.max(task.line, trimBlank(lines, at - 1, task.line));
+    task = undefined;
+  };
+  const closePlay = (at: number) => {
+    closeTask(at);
+    if (!play) return;
+    play.end = Math.max(play.line, trimBlank(lines, at - 1, play.line));
+    play = undefined;
+  };
+  const add = (s: Status) => {
+    if (!task) return;
+    task.counts[s] = (task.counts[s] ?? 0) + 1;
+    task.status = worst(task.status, s);
+    if (play) play.status = worst(play.status, s);
+  };
+
+  lines.forEach((text, line) => {
+    const h = /^(PLAY RECAP|PLAY|TASK|RUNNING HANDLER) ?(?:\[(.*?)\])?/.exec(text);
+    if (h && (h[1] === 'PLAY RECAP' || h[2] !== undefined)) {
+      if (h[1] === 'PLAY RECAP') { closePlay(line); recapLine = line; return; }
+      if (h[1] === 'PLAY') {
+        closePlay(line);
+        play = { line, end: line, name: h[2], tasks: [], status: 'none' };
+        plays.push(play);
+      } else {
+        closeTask(line);
+        if (!play) { play = { line, end: line, name: '', tasks: [], status: 'none' }; plays.push(play); }
+        const m = /^([^:]+?) : (.*)$/.exec(h[2]);
+        task = {
+          line, end: line, kind: h[1] === 'TASK' ? 'task' : 'handler',
+          name: m ? m[2] : h[2], role: m ? m[1] : undefined,
+          includes: [], counts: {}, status: 'none',
+        };
+        play.tasks.push(task);
+      }
+      // Condensed one-line logs: "TASK [x] ok: [host]"
+      const rest = text.slice(h[0].length);
+      for (const m of rest.matchAll(/\b(ok|changed|skipping|fatal|failed|included):\s*\[[^\]]*\](?::\s*(UNREACHABLE!|FAILED!))?/g)) {
+        add(resultStatus(m[1], m[2] ?? ''));
+      }
+      return;
+    }
+    if (recapLine !== undefined || !task) return;
+    const r = RESULT.exec(text);
+    if (r) {
+      add(resultStatus(r[1], text));
+      if (r[1] === 'included' && r[2]) task.includes.push(r[2]);
+      return;
+    }
+    if (/^\.\.\.ignoring\s*$/.test(text)) {
+      // The failure before this was ignored: count it as ignored, not failed.
+      if (task.counts.failed) {
+        task.counts.failed--;
+        if (!task.counts.failed) delete task.counts.failed;
+        task.counts.ignored = (task.counts.ignored ?? 0) + 1;
+        task.status = (Object.keys(task.counts) as Status[]).reduce(worst, 'none' as Status);
+        if (play) play.status = play.tasks.reduce((s, t) => worst(s, t.status), 'none' as Status);
+      }
+      return;
+    }
+    const p = /^task path: (.+?)(?::\d+)?\s*$/.exec(text);
+    if (p) task.path = p[1];
+  });
+  closePlay(recapLine ?? lines.length);
+  return { plays, recapLine };
+}
+
+function trimBlank(lines: string[], from: number, floor: number): number {
+  let i = from;
+  while (i > floor && lines[i].trim() === '') i--;
+  return i;
+}
+
+// Which file a task came from. Exact when the log has "task path:" lines (-vv);
+// otherwise inferred from the most recent "included:" file for the same role.
+export function assignFiles(play: LogPlay): Map<LogTask, { file?: string; inferred: boolean }> {
+  const out = new Map<LogTask, { file?: string; inferred: boolean }>();
+  const pending = new Map<string, string>(); // role ('' = none) -> last included file
+  let lastRole: string | undefined = undefined;
+  for (const t of play.tasks) {
+    const role = t.role ?? '';
+    if (lastRole !== undefined && role !== lastRole) {
+      for (const k of [...pending.keys()]) if (k !== role) pending.delete(k);
+    }
+    lastRole = role;
+    if (t.path) out.set(t, { file: t.path, inferred: false });
+    else out.set(t, { file: pending.get(role), inferred: true });
+    for (const f of t.includes) {
+      const r = /(?:^|[\\/])roles[\\/]([^\\/]+)[\\/]/.exec(f)?.[1] ?? role;
+      pending.set(r, f);
+    }
+  }
+  return out;
+}
