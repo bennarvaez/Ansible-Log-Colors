@@ -35,7 +35,7 @@
           "job_*.txt",
           "*.awx.txt"
         ],
-        "firstLine": "^(\\u001b\\[[0-9;]*m)*(PLAY \\[|TASK \\[|Using .+ as config file|No config file found|ansible-playbook \\[core|Identity added: |Vault password)"
+        "firstLine": "^(?:\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d+ p=\\d+ u=\\S+ n=\\S+ (?:DEBUG|INFO|WARNING|ERROR)\\| )?(\\u001b\\[[0-9;]*m)*(PLAY \\[|TASK \\[|Using .+ as config file|No config file found|ansible-playbook \\[core|Identity added: |Vault password)"
       }
     ],
     "commands": [
@@ -64,6 +64,11 @@
       {
         "command": "ansibleLog.reveal",
         "title": "Go to Section",
+        "category": "Ansible Log"
+      },
+      {
+        "command": "ansibleLog.showMetadata",
+        "title": "Show Log Metadata",
         "category": "Ansible Log"
       }
     ],
@@ -260,6 +265,13 @@
           "group": "navigation@90"
         }
       ],
+      "editor/context": [
+        {
+          "command": "ansibleLog.showMetadata",
+          "when": "editorLangId == ansible-log",
+          "group": "navigation@20"
+        }
+      ],
       "commandPalette": [
         {
           "command": "ansibleLog.reveal",
@@ -275,6 +287,10 @@
         },
         {
           "command": "ansibleLog.stripEscapeCodes",
+          "when": "editorLangId == ansible-log"
+        },
+        {
+          "command": "ansibleLog.showMetadata",
           "when": "editorLangId == ansible-log"
         }
       ]
