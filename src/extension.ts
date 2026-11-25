@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { looksLikeAnsibleOutput, parse, sections, Span, Style, Status, LogStructure, structure } from './parse';
+import { looksLikeAnsibleOutput, logMeta, parse, sections, Span, Style, Status, LogStructure, structure } from './parse';
 import { LogTree } from './tree';
 
 const LANG = 'ansible-log';
@@ -38,7 +38,11 @@ function typeFor(style: Style): vscode.TextEditorDecorationType | undefined {
   let t = types.get(style);
   if (t) return t;
   let opts: vscode.DecorationRenderOptions | undefined;
-  if (style === 'escape') {
+  if (style === 'logMeta') {
+    // Same trick as escape codes: the prefix stays in the buffer (copy, hover)
+    // but takes no visual space.
+    opts = { opacity: '0', letterSpacing: '-1ch' };
+  } else if (style === 'escape') {
     opts = hideEscapes()
       // Collapse the raw "\x1b[0;32m" codes to zero width but keep them in the layout.
       // (display:none broke selection highlighting: VS Code measures selection rectangles
@@ -96,8 +100,10 @@ function headerSpans(doc: vscode.TextDocument): Span[] {
     const style = STATUS_STYLE[status];
     if (!style) return;
     const text = doc.lineAt(line).text;
-    const end = text.search(/\s\*+\s*$/);
-    out.push({ line, start: 0, end: end > 0 ? end : text.length, style });
+    const off = logMeta(text)?.raw.length ?? 0;
+    const body = text.slice(off);
+    const end = body.search(/\s\*+\s*$/);
+    out.push({ line, start: off, end: off + (end > 0 ? end : body.length), style });
   };
   for (const p of structureOf(doc).plays) {
     if (p.name) push(p.line, p.status);
@@ -180,6 +186,28 @@ export function activate(context: vscode.ExtensionContext) {
       const clean = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
       if (clean === text) { vscode.window.showInformationMessage('No escape codes in this file.'); return; }
       await ed.edit(e => e.replace(new vscode.Range(0, 0, doc.lineCount, 0), clean));
+    }),
+    vscode.languages.registerHoverProvider({ language: LANG }, {
+      provideHover(doc, pos) {
+        const meta = logMeta(doc.lineAt(pos.line).text);
+        if (!meta) return;
+        const md = new vscode.MarkdownString();
+        md.appendMarkdown(`**${meta.level}** ${meta.time}\n\n`);
+        md.appendMarkdown(`pid \`${meta.pid}\` · ${meta.user} · \`${meta.logger}\``);
+        return new vscode.Hover(md);
+      },
+    }),
+    vscode.commands.registerCommand('ansibleLog.showMetadata', async () => {
+      const ed = vscode.window.activeTextEditor;
+      if (!ed) return;
+      const meta = logMeta(ed.document.lineAt(ed.selection.active.line).text);
+      if (!meta) {
+        vscode.window.showInformationMessage('This line has no Ansible log metadata.');
+        return;
+      }
+      const label = `${meta.level}  ${meta.time}  pid ${meta.pid}  user ${meta.user}  logger ${meta.logger}`;
+      const pick = await vscode.window.showInformationMessage(label, 'Copy');
+      if (pick === 'Copy') await vscode.env.clipboard.writeText(meta.raw.trimEnd());
     }),
     vscode.commands.registerCommand('ansibleLog.reveal', async (line: number) => {
       const ed = vscode.window.activeTextEditor;

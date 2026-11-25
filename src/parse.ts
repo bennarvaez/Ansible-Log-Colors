@@ -6,12 +6,38 @@ export type Style =
   | 'warning' | 'deprecation' | 'verbose' | 'debug'
   | 'header' | 'headerStars'
   | 'diffAdd' | 'diffRemove' | 'diffLines'
-  | 'escape'
+  | 'escape' | 'logMeta'
   | `ansi:${string}`; // ansi:<fg or "-">:<b or ->  (used when the log still has escape codes)
 
 export interface Span { line: number; start: number; end: number; style: Style }
 
 const ESC_ANY = /\x1b\[[0-9;?]*[A-Za-z]/g;
+
+// ansible-core file logger (log_path). display.py formats every line as
+// "%(asctime)s p=%(process)d u=%(user)s n=%(name)s %(levelname)s| %(message)s".
+const LOG_META = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+) p=(\d+) u=(\S+) n=(\S+) (DEBUG|INFO|WARNING|ERROR)\| /;
+
+export interface LogMeta {
+  time: string;
+  pid: string;
+  user: string;
+  logger: string;
+  level: string;
+  /** Prefix as stored, including the space after "|". */
+  raw: string;
+}
+
+export function logMeta(line: string): LogMeta | undefined {
+  const m = LOG_META.exec(line);
+  if (!m) return undefined;
+  return { time: m[1], pid: m[2], user: m[3], logger: m[4], level: m[5], raw: m[0] };
+}
+
+/** Line with the file-log prefix removed, so PLAY/TASK/ok patterns still match. */
+export function ansibleText(line: string): string {
+  const m = LOG_META.exec(line);
+  return m ? line.slice(m[0].length) : line;
+}
 
 export function hasAnsi(text: string): boolean {
   return text.includes('\x1b[');
@@ -154,7 +180,18 @@ function recap(text: string, line: number, spans: Span[]): boolean {
 }
 
 export function parse(lines: string[]): Span[] {
-  return lines.some(hasAnsi) ? parseAnsi(lines) : parsePlain(lines);
+  const bodies = lines.map(ansibleText);
+  const spans = bodies.some(hasAnsi) ? parseAnsi(bodies) : parsePlain(bodies);
+  const out: Span[] = [];
+  lines.forEach((text, line) => {
+    const meta = logMeta(text);
+    if (meta) out.push({ line, start: 0, end: meta.raw.length, style: 'logMeta' });
+  });
+  for (const s of spans) {
+    const off = logMeta(lines[s.line])?.raw.length ?? 0;
+    out.push(off ? { ...s, start: s.start + off, end: s.end + off } : s);
+  }
+  return out;
 }
 
 // Lines worth putting in the outline and folding: PLAY / TASK / HANDLER / RECAP headers.
@@ -163,7 +200,7 @@ export interface Section { line: number; kind: 'play' | 'task' | 'recap'; name: 
 export function sections(lines: string[]): Section[] {
   const out: Section[] = [];
   lines.forEach((raw, line) => {
-    const text = raw.replace(ESC_ANY, '');
+    const text = ansibleText(raw).replace(ESC_ANY, '');
     const m = /^(PLAY RECAP|PLAY|TASK|RUNNING HANDLER) ?(?:\[(.*?)\])?/.exec(text);
     if (!m || (m[1] !== 'PLAY RECAP' && m[2] === undefined)) return;
     const kind = m[1] === 'PLAY' ? 'play' : m[1] === 'PLAY RECAP' ? 'recap' : 'task';
@@ -175,7 +212,8 @@ export function sections(lines: string[]): Section[] {
 const DETECT = /^(\x1b\[[0-9;]*m)*(PLAY \[|TASK \[|PLAY RECAP|RUNNING HANDLER \[)/m;
 
 export function looksLikeAnsibleOutput(head: string): boolean {
-  return DETECT.test(head);
+  const stripped = head.split(/\r?\n/).map(ansibleText).join('\n');
+  return DETECT.test(stripped);
 }
 
 // ---------------------------------------------------------------- structure
@@ -229,7 +267,7 @@ function resultStatus(keyword: string, rest: string): Status {
 }
 
 export function structure(raw: string[]): LogStructure {
-  const lines = raw.map(l => l.includes('\x1b') ? l.replace(ESC_ANY, '') : l);
+  const lines = raw.map(l => ansibleText(l.includes('\x1b') ? l.replace(ESC_ANY, '') : l));
   const plays: LogPlay[] = [];
   let play: LogPlay | undefined;
   let task: LogTask | undefined;
